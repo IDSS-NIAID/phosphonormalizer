@@ -11,7 +11,9 @@ normalizePhospho(
   samplesCols,
   modseqCols,
   techRep,
-  plot.fc = NULL
+  plot.fc = NULL,
+  prop_good = 1,
+  llod = 0
 )
 }
 \arguments{
@@ -28,6 +30,10 @@ normalizePhospho(
 \item{techRep}{a factor that holds information about columns order and the technical replicates of the samples}
 
 \item{plot.fc}{This parameter if set plots the fold change distribution before and after pairwise normalization. controls and samples should be set as named vectors in a list (look at the example)}
+
+\item{prop_good}{Numeric proportion of good values to keep (see Details).}
+
+\item{llod}{Numeric lower limit of detection. Any value at or below this level will be considered missing.}
 }
 \value{
 A data.frame with the normalized values and their sequence and modification.
@@ -37,6 +43,9 @@ This function compensates for the bias introduced in global phosphorylation in t
 }
 \details{
 It is shown that global median normalization can introduce bias in the fold change of global phosphorylation between samples. It is suggested that by taking the non-enriched data into consideration, this bias could be compensated (Kauko et al. 2015).
+
+By default, only rows with complete data will be analyzed, but this can be relaxed by setting the `prop_good` parameter to a lower value.
+Setting the value at 0.5, for example, will allow samples with up to half of the replicates missing or below the lower limit of detection.
 }
 \examples{
 #Specifying the column numbers of abundances in the original data.frame,
@@ -58,7 +67,7 @@ head(norm)
 
 }
 \references{
-http://www.nature.com/articles/srep13099
+https://doi.org/10.1093/bioinformatics/btx573, https://www.nature.com/articles/srep13099
 }
 \seealso{
 [MSnbase](https://bioconductor.org/packages/release/bioc/html/MSnbase.html)

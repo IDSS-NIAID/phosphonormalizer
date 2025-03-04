@@ -8,13 +8,18 @@
 #' @param modseqCols A data.frame with two columns, with the names enriched and non.enriched, of type numeric or integer, which must contain the column number of samples that hold the sequence and modifications of the peptides
 #' @param techRep a factor that holds information about columns order and the technical replicates of the samples
 #' @param plot.fc This parameter if set plots the fold change distribution before and after pairwise normalization. controls and samples should be set as named vectors in a list (look at the example)
+#' @param prop_good Numeric proportion of good values to keep (see Details).
+#' @param llod Numeric lower limit of detection. Any value at or below this level will be considered missing.
 #'
 #' @details
 #' It is shown that global median normalization can introduce bias in the fold change of global phosphorylation between samples. It is suggested that by taking the non-enriched data into consideration, this bias could be compensated (Kauko et al. 2015).
 #'
+#' By default, only rows with complete data will be analyzed, but this can be relaxed by setting the `prop_good` parameter to a lower value.
+#' Setting the value at 0.5, for example, will allow samples with up to half of the replicates missing or below the lower limit of detection.
+#'
 #' @return A data.frame with the normalized values and their sequence and modification.
 #'
-#' @references http://www.nature.com/articles/srep13099
+#' @references https://doi.org/10.1093/bioinformatics/btx573, https://www.nature.com/articles/srep13099
 #' @seealso [MSnbase](https://bioconductor.org/packages/release/bioc/html/MSnbase.html)
 #' @examples
 #' #Specifying the column numbers of abundances in the original data.frame,
@@ -40,16 +45,21 @@
 #' @importFrom matrixStats rowMaxs colMedians
 #' @importFrom methods is
 #' @importFrom stats median
-normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols, modseqCols, techRep, plot.fc=NULL)
+normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols, modseqCols, techRep, plot.fc=NULL,
+                             prop_good = 1, llod = 0)
 {
+    # take care of annoying no visible binding note
+    if(FALSE)
+        mod <- modSeq <- NULL
+
+    ##### Argument checks #####
+
     #Check if all the necessary arguments are present
     if(missing(enriched)) stop("The function parameter (enriched) is missing!")
     if(missing(non.enriched)) stop("The function parameter (non.enriched) is missing!")
     if(missing(samplesCols)) stop("The function parameter (samplesCols) is missing!")
     if(missing(modseqCols)) stop("The function parameter (modseqCols) is missing!")
     if(missing(techRep)) stop("The function parameter (techRep) is missing!")
-
-    #A function that checks the types of the columns of a data.frame
 
     #Check the type of the arguments
     class.dfCols <- function(df, types)
@@ -95,18 +105,62 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
            !class.dfCols(non.enriched[, samplesCols$non.enriched], c("numeric", "integer"))))
         stop("The samples specified are not of type of numeric")
 
-    mod = seq = NULL
+
+    ##### Missingness checks and Filters #####
+
+    # convert values at or below `llod` to NA
+    enriched[,samplesCols$enriched] <- replace(enriched[,samplesCols$enriched],
+                                               enriched[,samplesCols$enriched] <= llod,
+                                               NA)
+
+    non.enriched[,samplesCols$non.enriched] <- replace(non.enriched[,samplesCols$non.enriched],
+                                                       non.enriched[,samplesCols$non.enriched] <= llod,
+                                                       NA)
+
+
+    # drop values within each sample with too many missing or low values
+    for(tr in levels(techRep))
+    {
+        tr_num <- techRep[techRep == tr] |> unique() |> as.numeric()
+
+        drop <- check_missingness(enriched,
+                                  samplesCols$enriched[techRep == tr_num],
+                                  prop_good,
+                                  llod)
+
+        enriched[drop, samplesCols$enriched[techRep == tr_num]] <- NA
+
+        drop <- check_missingness(non.enriched,
+                                  samplesCols$non.enriched[techRep == tr_num],
+                                  prop_good,
+                                  llod)
+
+        non.enriched[drop, samplesCols$non.enriched[techRep == tr_num]] <- NA
+    }
+
+
+    # keep these for later
     enriched.original.mat <- as.matrix(enriched[, samplesCols$enriched])
     seqMod <- enriched[, modseqCols$enriched]
-    #Removing peptides with non-quantified values across the runs
-    enriched <- enriched[apply(X = enriched[ ,samplesCols$enriched], MARGIN = 1,
-                                function(x) all(x != 0)),]
-    non.enriched <- non.enriched[apply(X = non.enriched[,samplesCols$non.enriched], MARGIN = 1,
-                                        function(x) all(x != 0)),]
 
+
+    # drop rows with too many missing or low values
+    too_many_missing <- apply(enriched[,samplesCols$enriched], 1, function(.x) all(is.na(.x) | .x == 0))
+    enriched <- enriched[!too_many_missing,]
+
+    too_many_missing <- apply(non.enriched[,samplesCols$non.enriched], 1, function(.x) all(is.na(.x) | .x == 0))
+    non.enriched <- non.enriched[!too_many_missing,]
+
+
+    # housekeeping of seq and mod columns
     colnames(enriched)[modseqCols$enriched] <- c("seq", "mod")
     colnames(non.enriched)[modseqCols$non.enriched] <- c("seq", "mod")
 
+    enriched[,"modSeq"] <- paste(enriched$seq, enriched$mod,sep = ", ")
+    non.enriched[,"modSeq"] <- paste(non.enriched$seq, non.enriched$mod,sep = ", ")
+
+
+    # filter out phospho modifications
     if(is.null(phospho))
     {
         enriched <- enriched[grepl(pattern = "Phospho", x = enriched$mod),]
@@ -116,14 +170,19 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
         non.enriched <- non.enriched[grepl(pattern = phospho, x = non.enriched$mod),]
     }
 
-    enriched <- plyr::ddply(enriched, plyr::.(seq, mod),
-                            function(df) colSums(df[, samplesCols$enriched]))
-    non.enriched <- plyr::ddply(non.enriched, plyr::.(seq, mod),
-                                function(df) colSums(df[, samplesCols$non.enriched]))
 
-    enriched[,"modSeq"] <- paste(enriched$seq, enriched$mod,sep = ", ")
-    non.enriched[,"modSeq"] <- paste(non.enriched$seq, non.enriched$mod,sep = ", ")
+    # column sums for each combination of seq and mod
+    enriched     <- plyr::ddply(    enriched, plyr::.(seq, mod, modSeq),
+                                function(df) colSums(df[, samplesCols$enriched    ], na.rm = TRUE))
+    non.enriched <- plyr::ddply(non.enriched, plyr::.(seq, mod, modSeq),
+                                function(df) colSums(df[, samplesCols$non.enriched], na.rm = TRUE))
 
+    # convert any 0s back to NAs
+    enriched[enriched == 0] <- NA
+    non.enriched[non.enriched == 0] <- NA
+
+
+    # find intersection between enriched and non-enriched
     inter <- intersect(non.enriched$modSeq, enriched$modSeq)
     stopifnot(length(inter) > 0)
     enriched.olp.idx <- which(enriched$modSeq %in% inter)
@@ -132,25 +191,38 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
     enriched.mat <- enriched[enriched.olp.idx, ]
     non.enriched.mat <- non.enriched[non.enriched.olp.idx, ]
 
-    enriched.mat <- enriched.mat[order(enriched.mat$modSeq),]
+
+    # sort rows by modSeq and convert to numeric matrix
+    enriched.mat     <-     enriched.mat[order(    enriched.mat$modSeq),]
     non.enriched.mat <- non.enriched.mat[order(non.enriched.mat$modSeq),]
 
-    enriched.mat <- as.matrix(enriched.mat[, -c(1,2,ncol(enriched))])
-    non.enriched.mat <- as.matrix(non.enriched.mat[, -c(1,2,ncol(enriched))])
-    if(length(inter) > 1) {
-        ratios <- non.enriched.mat/enriched.mat
+                                                     # drop seq, mod and modSeq columns
+    enriched.mat     <- as.matrix(    enriched.mat[, -c(1:3)])
+    non.enriched.mat <- as.matrix(non.enriched.mat[, -c(1:3)])
 
-        colnames(ratios) <- as.numeric(techRep)
-        ratios.avg <- matrix(nrow = nrow(ratios), ncol = length(levels(techRep)))
+
+    ##### Ratios and Averages #####
+
+    if(length(inter) > 1) {
+        # calculate ratios
+        ratios <- non.enriched.mat/enriched.mat
+        colnames(ratios) <- as.character(techRep)
+
+        # double check for non-finite values
+        ratios[!is.finite(ratios)] <- NA
+
+        # this is where we will collect average ratios for each condition in techRep
+        ratios.avg <- matrix(nrow = nrow(ratios), ncol = length(levels(techRep)),
+                             dimnames = list(NULL, levels(techRep)))
+
+        # calculate average ratios for each condition in techRep
         for (tr in levels(techRep)) {
-            tr_num <- techRep[techRep == tr] |> unique() |> as.numeric()
             if(nrow(ratios.avg) == 1) {
-                ratios.avg[,tr_num] <- mean(ratios[,colnames(ratios) == tr_num])
+                ratios.avg[,tr] <- mean(ratios[,colnames(ratios) == tr], na.rm = TRUE)
             } else {
-                ratios.avg[,tr_num] <- rowMeans(ratios[,colnames(ratios) == tr_num])
+                ratios.avg[,tr] <- rowMeans(ratios[,colnames(ratios) == tr], na.rm = TRUE)
             }
         }
-
 
         max.fc <- log2(ratios.avg[,1]) - log2(ratios.avg[,2])
 
@@ -158,27 +230,33 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
         {
             for (i in 2:(ncol(ratios.avg)-1)) {
                 for (j in (i+1):(ncol(ratios.avg))) {
-                    max.fc <- matrixStats::rowMaxs(cbind(max.fc, log2(ratios.avg[,i]) - log2(ratios.avg[,j])))
+                    max.fc <- matrixStats::rowMaxs(cbind(max.fc, log2(ratios.avg[,i]) - log2(ratios.avg[,j])), na.rm = TRUE)
                 }
             }
         }
 
-        boxp <- boxplot(max.fc, plot = FALSE)
-        ratios <- ratios[!(max.fc > max(boxp$stats)),]
+        # check for non-finite values in max.fc, stemming from NAs
+        max.fc[!is.finite(max.fc)] <- NA
 
-        ratios <- log10(ratios)
-        if(methods::is(ratios, "matrix") | methods::is(ratios, "data.frame")) {
-            col.sub <- rowMeans(ratios)
+        # remove outliers and missing values
+        boxp <- boxplot(max.fc, plot = FALSE)
+        ratios <- ratios[!(is.na(max.fc) | max.fc > max(boxp$stats)),]
+
+        # calculate rowMeans on log10 scale
+        lratios <- log10(ratios)
+        if(methods::is(lratios, "matrix") | methods::is(lratios, "data.frame")) {
+            col.sub <- rowMeans(lratios, na.rm = TRUE)
         } else {
-            col.sub <- mean(ratios)
+            col.sub <- mean(lratios, na.rm = TRUE)
         }
 
-        ratios.norm <- ratios - col.sub
+        # center ratios
+        lratios.norm <- lratios - col.sub
 
-        if(methods::is(ratios, "matrix") | methods::is(ratios, "data.frame")) {
-            factors <- 10^(matrixStats::colMedians(ratios.norm))
+        if(methods::is(lratios, "matrix") | methods::is(lratios, "data.frame")) {
+            factors <- 10^(matrixStats::colMedians(lratios.norm, na.rm = TRUE))
         } else {
-            factors <- ratios.norm
+            factors <- 10^lratios.norm
         }
     } else {
         factors <- as.numeric(non.enriched.mat/enriched.mat)
