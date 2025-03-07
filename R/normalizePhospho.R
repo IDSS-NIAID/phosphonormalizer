@@ -224,6 +224,9 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
             }
         }
 
+        # calculate max fold change
+        # i.e. find the phosphopeptides with the largest variation between total and enriched samples
+        # we will use these to filter outlier rows from `ratios`
         max.fc <- log2(ratios.avg[,1]) - log2(ratios.avg[,2])
 
         if(ncol(ratios.avg) > 2)
@@ -238,11 +241,12 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
         # check for non-finite values in max.fc, stemming from NAs
         max.fc[!is.finite(max.fc)] <- NA
 
-        # remove outliers and missing values
+        # remove outlier rows from `ratios`
         boxp <- boxplot(max.fc, plot = FALSE)
         ratios <- ratios[!(is.na(max.fc) | max.fc > max(boxp$stats)),]
 
         # calculate rowMeans on log10 scale
+        # this will be used to center the ratios
         lratios <- log10(ratios)
         if(methods::is(lratios, "matrix") | methods::is(lratios, "data.frame")) {
             col.sub <- rowMeans(lratios, na.rm = TRUE)
@@ -253,6 +257,8 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
         # center ratios
         lratios.norm <- lratios - col.sub
 
+        # calculate column medians on log10 scale
+        # these will be used as the normalization factors for each sample
         if(methods::is(lratios, "matrix") | methods::is(lratios, "data.frame")) {
             factors <- 10^(matrixStats::colMedians(lratios.norm, na.rm = TRUE))
         } else {
