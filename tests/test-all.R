@@ -1,2 +1,2 @@
 library(testthat)
-test_check("phosphonormalizer")
+test_check("phosphonormalizer2")

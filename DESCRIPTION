@@ -1,14 +1,14 @@
-Package: phosphonormalizer
+Package: phosphonormalizer2
 Type: Package
-Title: Compensates for the bias introduced by median normalization in
-Version: 2.0
-Date: 2025-03-04
+Title: Compensates for the bias introduced by median normalization in phospho-enriched data
+Version: 2.1
+Date: 2025-03-06
 Authors@R: 
   c(
         person(
                 given = "Sohrab",
                 family = "Saraei",
-                role = c("aut", "cre"),
+                role = "aut",
                 email = "sohrab.saraei@blueprintgenetics.com"
         ),
         person(
@@ -24,7 +24,8 @@ Authors@R:
         person(
                 given = "Randy",
                 family = "Johnson",
-                role = "ctb"
+                role = c("aut", "cre"),
+                email = "randall.johnson@nih.gov"
         ),
         person(
                 given = "Laura",
@@ -32,9 +33,11 @@ Authors@R:
                 role = "ths"
         )
    )
-Description: It uses the overlap between enriched and non-enriched
-        datasets to compensate for the bias introduced in global
-        phosphorylation after applying median normalization.
+Description: It uses the overlap between enriched and non-enriched datasets to compensate
+        for the bias introduced in global phosphorylation after applying median normalization.
+        This version has enhancements not included in the Bioconductor version. Primarily,
+        it treats factors more consistently, allows filtering on a lower limit of detection,
+        and alows a user-specified amount of missing data.
 biocViews: Software, StatisticalMethod, WorkflowStep, Normalization,
         Proteomics
 License: GPL (>= 2)

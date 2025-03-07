@@ -265,9 +265,9 @@ normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols
     enriched.normalized.mat <- t(t(enriched.original.mat) * factors)
     if(!is.null(plot.fc)) {
         for(i in plot.fc$control) {
-            tr_i <- as.numeric(techRep) == i
+            tr_i <- techRep == i
             for(j in plot.fc$samples) {
-                tr_j <- as.numeric(techRep) == j
+                tr_j <- techRep == j
                 a.original <- rowMeans(log2(enriched.original.mat[,tr_i]+1),na.rm=TRUE)
                 b.original <- rowMeans(log2(enriched.original.mat[,tr_j]+1),na.rm=TRUE)
                 fc.original <- a.original - b.original
