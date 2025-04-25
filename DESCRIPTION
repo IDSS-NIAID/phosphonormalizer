@@ -1,8 +1,7 @@
 Package: phosphonormalizer2
 Type: Package
 Title: Compensates for the bias introduced by median normalization in phospho-enriched data
-Version: 2.1
-Date: 2025-03-06
+Version: 2.1-1
 Authors@R: 
   c(
         person(
@@ -41,7 +40,7 @@ Description: It uses the overlap between enriched and non-enriched datasets to c
 biocViews: Software, StatisticalMethod, WorkflowStep, Normalization,
         Proteomics
 License: GPL (>= 2)
-Imports: plyr, stats, graphics, matrixStats, methods
+Imports: plyr, stats, graphics, matrixStats, methods, MSfmtR
 Suggests: knitr, rmarkdown, testthat
 Enhances: MSnbase
 Depends: R (>= 4.0)

@@ -44,6 +44,7 @@
 #' @importFrom graphics abline boxplot
 #' @importFrom matrixStats rowMaxs colMedians
 #' @importFrom methods is
+#' @importFrom MSfmtR check_missingness
 #' @importFrom stats median
 normalizePhospho <- function(enriched, non.enriched, phospho = NULL, samplesCols, modseqCols, techRep, plot.fc=NULL,
                              prop_good = 1, llod = 0)
